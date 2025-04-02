@@ -2,7 +2,7 @@ import SwiftUI
 
 struct BoardView: View {
     @Namespace private var animation
-    @Binding var flattenedBoard: [Tile]
+    @Binding var flattenedBoard: [any Tile]
     let numberOfTiles: Int
 
     var body: some View {
