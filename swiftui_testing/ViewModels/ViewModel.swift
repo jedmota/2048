@@ -23,47 +23,34 @@ final class ViewModel: GameProtocol, ObservableObject {
         board = (0..<Self.numberOfTiles).map { row in (0..<Self.numberOfTiles).map { column in EmptyTile(row: row, column: column) } }
         score = 0
         game.index = 0
-        addTile()
-        game.index = 0
         game.history = []
-        addTile()
-        game.index = 0
+        let point1 = addTile()
+        let point2 = addTile()
+        new = [point1, point2]
+        game.history.append(EmptyGameState(board: board, score: score, new: new))
     }
 
-    func addTile() {
+    func addTile() -> CGPoint {
         let point = getOneRandomEmptyTilePoint()
         board[Int(point.y)][Int(point.x)] = EmptyTile(value: 2)
+        return point
+    }
+    
+    func addTileAndIterate() {
+        let point = addTile()
         new = [point]
-        game.index += 1
         let snapshot = EmptyGameState(board: board, score: score, new: new)
-        if game.history.count < game.index + 1 {
-            game.history.append(snapshot)
-        } else {
-            game.history.insert(snapshot, at: game.index)
-        }
+        game.snapshot(snapshot)
     }
 
     func back() {
-        guard game.index > 0 else { return }
-        game.index -= 1
+        guard game.backIfPossible() else { return }
         updateHistory()
     }
 
     func next() {
-        guard game.history.count > game.index + 1 else { return }
-        game.index += 1
+        guard game.nextIfPossible() else { return }
         updateHistory()
-    }
-
-    func updateHistory() {
-        board = game.history[game.index].board
-        score = game.history[game.index].score
-        new = game.history[game.index].new
-    }
-
-    func dropHistoryAfterIndex() {
-        let snapsToRemove = game.history.count - (game.index + 1)
-        game.history = game.history.dropLast(snapsToRemove)
     }
 
     func up() {
@@ -72,8 +59,8 @@ final class ViewModel: GameProtocol, ObservableObject {
             moved = moveUp(i) || moved
         }
         if moved {
-            addTile()
-            dropHistoryAfterIndex()
+            addTileAndIterate()
+            game.dropHistoryAfterIndex()
         }
     }
 
@@ -83,8 +70,8 @@ final class ViewModel: GameProtocol, ObservableObject {
             moved = moveDown(i) || moved
         }
         if moved {
-            addTile()
-            dropHistoryAfterIndex()
+            addTileAndIterate()
+            game.dropHistoryAfterIndex()
         }
     }
 
@@ -94,8 +81,8 @@ final class ViewModel: GameProtocol, ObservableObject {
             moved = moveRight(i) || moved
         }
         if moved {
-            addTile()
-            dropHistoryAfterIndex()
+            addTileAndIterate()
+            game.dropHistoryAfterIndex()
         }
     }
 
@@ -105,8 +92,8 @@ final class ViewModel: GameProtocol, ObservableObject {
             moved = moveLeft(i) || moved
         }
         if moved {
-            addTile()
-            dropHistoryAfterIndex()
+            addTileAndIterate()
+            game.dropHistoryAfterIndex()
         }
     }
 
@@ -115,15 +102,21 @@ final class ViewModel: GameProtocol, ObservableObject {
     }
 
     func hasNext() -> Bool {
-        !game.history.isEmpty && game.index < game.history.count - 1
+        return game.hasNext()
     }
 
     func hasPrevious() -> Bool {
-        game.index > 0
+        return game.hasPrevious()
     }
 }
 
 private extension ViewModel {
+    func updateHistory() {
+        board = game.actualBoard
+        score = game.actualScore
+        new = game.actualNew
+    }
+    
     func getColumn(_ column: Int) -> [any Tile] {
         return board.map {
             $0[column]
@@ -180,9 +173,9 @@ private extension ViewModel {
         for tile in tiles {
             if lastValue == tile.value {
                 result = result.dropLast()
-                tile.doubleValue()
-                result.append(tile)
-                score += tile.value
+                let newTile = EmptyTile(id: tile.id, value: tile.value * 2)
+                result.append(newTile)
+                score += newTile.value
                 lastValue = nil
             } else {
                 result.append(tile)
@@ -224,10 +217,6 @@ class EmptyTile: Tile {
     
     convenience init(row: Int, column: Int) {
         self.init(id: "empty_id:\(row),\(column)", value: 0)
-    }
-    
-    func doubleValue() {
-        value *= 2
     }
     
     static func == (lhs: EmptyTile, rhs: EmptyTile) -> Bool {
@@ -277,11 +266,57 @@ class EmptyGameState: GameState {
 }
 
 class EmptyGame: Game {
-    var history: [GameState]
-    var index: Int
+    var history: [GameState] {
+        didSet {
+            print("###", "history.count", history.count)
+        }
+    }
+    var index: Int {
+        didSet {
+            print("###", "index", index)
+        }
+    }
+    var actualBoard: [[any Tile]] { history[index].board }
+    var actualScore: Int { history[index].score }
+    var actualNew: [CGPoint] { history[index].new }
     
     init() {
         history = []
         index = 0
+    }
+    
+    func dropHistoryAfterIndex() {
+        let snapsToRemove = history.count - (index + 1)
+        guard snapsToRemove > 0 else { return }
+        history = history.dropLast(snapsToRemove)
+    }
+    
+    func snapshot(_ snapshot: any GameState) {
+        index += 1
+        if history.count < index + 1 {
+            history.append(snapshot)
+        } else {
+            history.insert(snapshot, at: index)
+        }
+    }
+    
+    func hasNext() -> Bool {
+        !history.isEmpty && index < history.count - 1
+    }
+
+    func hasPrevious() -> Bool {
+        index > 0
+    }
+    
+    func backIfPossible() -> Bool {
+        guard index > 0 else { return false}
+        index -= 1
+        return true
+    }
+
+    func nextIfPossible() -> Bool {
+        guard history.count > index + 1 else { return false }
+        index += 1
+        return true
     }
 }
